@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GeoFlip Level Builder</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c0f;
+    --panel: #0f1318;
+    --border: #1e2730;
+    --grid-line: #141a20;
+    --grid-line-major: #1a2330;
+    --neon: #39ff8f;
+    --neon-dim: #1a7a45;
+    --amber: #ffb627;
+    --amber-dim: #7a560f;
+    --red: #ff3939;
+    --blue: #39b0ff;
+    --purple: #b039ff;
+    --text: #c8d8c0;
+    --text-dim: #4a6050;
+    --cell: 24px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* scanline overlay */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.08) 2px,
+      rgba(0,0,0,0.08) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    flex-shrink: 0;
+  }
+
+  header h1 {
+    font-family: 'Orbitron', monospace;
+    font-size: 14px;
+    font-weight: 900;
+    color: var(--neon);
+    text-shadow: 0 0 12px var(--neon);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+
+  header .subtitle {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+  }
+
+  header .spacer { flex: 1; }
+
+  .level-name-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .level-name-wrap input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--amber);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    padding: 4px 8px;
+    width: 180px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .level-name-wrap input:focus { border-color: var(--amber); box-shadow: 0 0 8px var(--amber-dim); }
+
+  .main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── TOOLBAR ── */
+  .toolbar {
+    width: 160px;
+    flex-shrink: 0;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    padding: 8px;
+    gap: 4px;
+  }
+
+  .tool-section-label {
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    padding: 6px 4px 2px;
+    border-top: 1px solid var(--border);
+    margin-top: 4px;
+  }
+  .tool-section-label:first-child { border-top: none; margin-top: 0; }
+
+  .tool-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: left;
+    width: 100%;
+  }
+  .tool-btn:hover { border-color: var(--neon-dim); color: var(--neon); background: rgba(57,255,143,0.04); }
+  .tool-btn.active { border-color: var(--neon); color: var(--neon); background: rgba(57,255,143,0.1); box-shadow: 0 0 10px rgba(57,255,143,0.15); }
+  .tool-btn .icon {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .tool-btn.erase-btn { color: var(--red); border-color: #3a1a1a; }
+  .tool-btn.erase-btn:hover, .tool-btn.erase-btn.active { border-color: var(--red); background: rgba(255,57,57,0.08); box-shadow: 0 0 10px rgba(255,57,57,0.15); }
+
+  .param-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  .param-row label { flex: 1; }
+  .param-row input[type=number] {
+    width: 44px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--amber);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    padding: 3px 5px;
+    outline: none;
+  }
+  .param-row input[type=number]:focus { border-color: var(--amber); }
+
+  /* ── CANVAS AREA ── */
+  .canvas-wrap {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+    background: var(--bg);
+    cursor: crosshair;
+  }
+
+  #level-canvas {
+    display: block;
+    image-rendering: pixelated;
+  }
+
+  /* ── OUTPUT PANEL ── */
+  .output-panel {
+    width: 220px;
+    flex-shrink: 0;
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .output-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+
+  .output-header .obj-count {
+    color: var(--neon);
+    font-size: 11px;
+  }
+
+  #output-text {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: #5a8a6a;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    padding: 10px 12px;
+    resize: none;
+    outline: none;
+    overflow-y: auto;
+    line-height: 1.6;
+  }
+
+  .output-footer {
+    padding: 8px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .btn {
+    padding: 7px 12px;
+    border: 1px solid;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    transition: all 0.15s;
+    width: 100%;
+    text-align: center;
+  }
+  .btn-neon { background: transparent; border-color: var(--neon); color: var(--neon); }
+  .btn-neon:hover { background: rgba(57,255,143,0.15); box-shadow: 0 0 12px rgba(57,255,143,0.3); }
+  .btn-amber { background: transparent; border-color: var(--amber); color: var(--amber); }
+  .btn-amber:hover { background: rgba(255,182,39,0.15); box-shadow: 0 0 12px rgba(255,182,39,0.3); }
+  .btn-red { background: transparent; border-color: var(--red); color: var(--red); }
+  .btn-red:hover { background: rgba(255,57,57,0.15); box-shadow: 0 0 12px rgba(255,57,57,0.3); }
+  .btn-blue { background: transparent; border-color: var(--blue); color: var(--blue); }
+  .btn-blue:hover { background: rgba(57,176,255,0.15); box-shadow: 0 0 12px rgba(57,176,255,0.3); }
+
+  /* status bar */
+  .statusbar {
+    height: 22px;
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 0 12px;
+    font-size: 10px;
+    color: var(--text-dim);
+    flex-shrink: 0;
+  }
+  .statusbar span { color: var(--neon); }
+
+  /* tooltip */
+  .tooltip {
+    position: fixed;
+    background: var(--panel);
+    border: 1px solid var(--neon-dim);
+    color: var(--neon);
+    font-size: 10px;
+    padding: 3px 8px;
+    pointer-events: none;
+    z-index: 1000;
+    display: none;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>GeoFlip</h1>
+  <span class="subtitle">LEVEL BUILDER v1.0</span>
+  <div class="spacer"></div>
+  <div class="level-name-wrap">
+    <span>LEVEL:</span>
+    <input type="text" id="level-name" value="My Level" placeholder="Level name..." maxlength="40">
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- TOOLBAR -->
+  <div class="toolbar">
+
+    <div class="tool-section-label">Basics</div>
+
+    <button class="tool-btn" data-tool="block" title="Single solid block (id 1)">
+      <span class="icon"><svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" fill="#39ff8f" opacity="0.9"/></svg></span>
+      Block
+    </button>
+
+    <button class="tool-btn" data-tool="platform" title="Horizontal platform (b)">
+      <span class="icon"><svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="6" width="14" height="5" fill="#39ff8f" opacity="0.9"/></svg></span>
+      Platform
+    </button>
+    <div class="param-row">
+      <label>Length</label>
+      <input type="number" id="platform-len" value="5" min="1" max="50">
+    </div>
+
+    <button class="tool-btn" data-tool="wall" title="Vertical wall (w)">
+      <span class="icon"><svg width="16" height="16" viewBox="0 0 16 16"><rect x="5" y="1" width="6" height="14" fill="#39ff8f" opacity="0.9"/></svg></span>
+      Wall
+    </button>
+    <div class="param-row">
+      <label>Height</label>
+      <input type="number" id="wall-height" value="4" min="1" max="20">
+    </div>
+
+    <div class="tool-section-label">Spikes</div>
+
+    <button class="tool-btn" data-tool="spike_up" title="Spike pointing up (id 2)">
+      <span class="icon"><svg width="16" height="16" viewBox="0 0 16 16"><polygon points="8,1 15,15 1,15" fill="#ff3939" opacity="0.9"/></svg></span>
+      Spike ▲
+    </button>
+
+    <button class="tool-btn" data-tool="spike_down" title="Spike pointing down (id 3)">
+      <span class="icon"><svg width="16" height="16" viewBox="0 0 16 16"><polygon points="8,15 15,1 1,1" fill="#ff8c39" opacity="0.9"/></svg></span>
+      Spike ▼
+    </button>
+
+    <div class="tool-section-label">Portals</div>
+
+    <button class="tool-btn" data-tool="portal_ship" title="Ship portal (id 6)">
+      <span class="icon"><svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="3" fill="none" stroke="#39b0ff" stroke-width="2"/><text x="8" y="11" text-anchor="middle" fill="#39b0ff" font-size="8" font-family="monospace">✈</text></svg></span>
+      Ship
+    </button>
+
+    <button class="tool-btn" data-tool="portal_cube" title="Cube portal (id 7)">
+      <span class="icon"><svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="3" fill="none" stroke="#39ff8f" stroke-width="2"/><text x="8" y="11" text-anchor="middle" fill="#39ff8f" font-size="8" font-family="monospace">■</text></svg></span>
+      Cube
+    </button>
+
+    <button class="tool-btn" data-tool="portal_grav_flip" title="Flip gravity portal (id 8)">
+      <span class="icon"><svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="3" fill="none" stroke="#b039ff" stroke-width="2"/><text x="8" y="11" text-anchor="middle" fill="#b039ff" font-size="9" font-family="monospace">↓</text></svg></span>
+      Grav ↓
+    </button>
+
+    <button class="tool-btn" data-tool="portal_grav_norm" title="Normal gravity portal (id 9)">
+      <span class="icon"><svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="3" fill="none" stroke="#ffb627" stroke-width="2"/><text x="8" y="11" text-anchor="middle" fill="#ffb627" font-size="9" font-family="monospace">↑</text></svg></span>
+      Grav ↑
+    </button>
+
+    <div class="tool-section-label">Edit</div>
+
+    <button class="tool-btn erase-btn" data-tool="erase" title="Right-click also erases">
+      <span class="icon"><svg width="16" height="16" viewBox="0 0 16 16"><line x1="2" y1="2" x2="14" y2="14" stroke="#ff3939" stroke-width="2"/><line x1="14" y1="2" x2="2" y2="14" stroke="#ff3939" stroke-width="2"/></svg></span>
+      Erase
+    </button>
+
+  </div>
+
+  <!-- CANVAS -->
+  <div class="canvas-wrap" id="canvas-wrap">
+    <canvas id="level-canvas"></canvas>
+  </div>
+
+  <!-- OUTPUT -->
+  <div class="output-panel">
+    <div class="output-header">
+      <span>Output</span>
+      <span class="obj-count" id="obj-count">0 objs</span>
+    </div>
+    <textarea id="output-text" readonly spellcheck="false"></textarea>
+    <div class="output-footer">
+      <button class="btn btn-neon" id="btn-download">⬇ Download .gflvl</button>
+      <button class="btn btn-amber" id="btn-copy">⧉ Copy to clipboard</button>
+      <button class="btn btn-blue" id="btn-import">⬆ Import .gflvl</button>
+      <input type="file" id="file-input" accept=".gflvl,.txt" style="display:none">
+      <button class="btn btn-red" id="btn-clear">✕ Clear level</button>
+    </div>
+  </div>
+
+</div>
+
+<div class="statusbar">
+  CURSOR: <span id="status-pos">0, 0</span>
+  &nbsp;|&nbsp; TOOL: <span id="status-tool">BLOCK</span>
+  &nbsp;|&nbsp; TIP: <span style="color:var(--text-dim)">RIGHT-CLICK to erase &nbsp;|&nbsp; DRAG to paint</span>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+const CELL = 24;
+const ROWS = 16;  // visible rows (y: -8 to +7, 0 is ground)
+const COLS = 200; // level width in cells
+const GROUND_ROW = 10; // which canvas row is y=0
+
+const canvas = document.getElementById('level-canvas');
+const ctx = canvas.getContext('2d');
+
+canvas.width = COLS * CELL;
+canvas.height = ROWS * CELL;
+
+// ── STATE ──
+let currentTool = 'block';
+let painting = false;
+let paintMode = 'place'; // 'place' or 'erase'
+let objects = []; // {type, x, y, len?, height?}
+
+// ── TOOL SELECTION ──
+document.querySelectorAll('.tool-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    currentTool = btn.dataset.tool;
+    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('status-tool').textContent = btn.dataset.tool.toUpperCase().replace('_', ' ');
+  });
+});
+// activate default
+document.querySelector('[data-tool="block"]').classList.add('active');
+
+// ── CANVAS COORDS ──
+function canvasToLevel(cx, cy) {
+  const col = Math.floor(cx / CELL);
+  const row = Math.floor(cy / CELL);
+  const lx = col;
+  const ly = GROUND_ROW - row - 1;
+  return { lx, ly, col, row };
+}
+
+function levelToCanvas(lx, ly) {
+  const col = lx;
+  const row = GROUND_ROW - ly - 1;
+  return { cx: col * CELL, cy: row * CELL };
+}
+
+// ── OBJECT MANAGEMENT ──
+function getParam(id) { return parseInt(document.getElementById(id).value) || 1; }
+
+function placeAt(lx, ly) {
+  const tool = currentTool;
+  if (tool === 'erase') { eraseAt(lx, ly); return; }
+
+  // remove anything at same spot (for singles)
+  const isSingle = !['platform','wall'].includes(tool);
+  if (isSingle) eraseAt(lx, ly);
+
+  switch(tool) {
+    case 'block':         objects.push({type:'block', x:lx, y:ly}); break;
+    case 'spike_up':      objects.push({type:'spike_up', x:lx, y:ly}); break;
+    case 'spike_down':    objects.push({type:'spike_down', x:lx, y:ly}); break;
+    case 'portal_ship':   objects.push({type:'portal_ship', x:lx, y:ly}); break;
+    case 'portal_cube':   objects.push({type:'portal_cube', x:lx, y:ly}); break;
+    case 'portal_grav_flip': objects.push({type:'portal_grav_flip', x:lx, y:ly}); break;
+    case 'portal_grav_norm': objects.push({type:'portal_grav_norm', x:lx, y:ly}); break;
+    case 'platform': {
+      const len = getParam('platform-len');
+      // remove any existing platform starting at same x,y
+      objects = objects.filter(o => !(o.type === 'platform' && o.x === lx && o.y === ly));
+      objects.push({type:'platform', x:lx, y:ly, len});
+      break;
+    }
+    case 'wall': {
+      const height = getParam('wall-height');
+      objects = objects.filter(o => !(o.type === 'wall' && o.x === lx && o.y === ly));
+      objects.push({type:'wall', x:lx, y:ly, height});
+      break;
+    }
+  }
+  render();
+  updateOutput();
+}
+
+function eraseAt(lx, ly) {
+  objects = objects.filter(o => {
+    if (o.x === lx && o.y === ly) return false;
+    // erase cells covered by platform
+    if (o.type === 'platform') {
+      if (ly === o.y && lx >= o.x && lx < o.x + o.len) return false;
+    }
+    // erase cells covered by wall
+    if (o.type === 'wall') {
+      if (lx === o.x && ly >= o.y && ly < o.y + o.height) return false;
+    }
+    return true;
+  });
+  render();
+  updateOutput();
+}
+
+// ── MOUSE EVENTS ──
+function getMouseLevel(e) {
+  const rect = canvas.getBoundingClientRect();
+  const wrap = document.getElementById('canvas-wrap');
+  const cx = e.clientX - rect.left;
+  const cy = e.clientY - rect.top;
+  return canvasToLevel(cx, cy);
+}
+
+canvas.addEventListener('mousedown', e => {
+  e.preventDefault();
+  painting = true;
+  paintMode = e.button === 2 ? 'erase' : 'place';
+  const {lx, ly} = getMouseLevel(e);
+  if (paintMode === 'erase') eraseAt(lx, ly);
+  else placeAt(lx, ly);
+});
+
+canvas.addEventListener('mousemove', e => {
+  const {lx, ly} = getMouseLevel(e);
+  document.getElementById('status-pos').textContent = `${lx}, ${ly}`;
+
+  if (painting) {
+    if (paintMode === 'erase') eraseAt(lx, ly);
+    else if (['block','spike_up','spike_down'].includes(currentTool)) placeAt(lx, ly);
+  }
+});
+
+canvas.addEventListener('mouseup', () => { painting = false; });
+canvas.addEventListener('mouseleave', () => { painting = false; });
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+// ── RENDER ──
+const COLORS = {
+  block:           '#39ff8f',
+  platform:        '#39ff8f',
+  wall:            '#39ff8f',
+  spike_up:        '#ff3939',
+  spike_down:      '#ff8c39',
+  portal_ship:     '#39b0ff',
+  portal_cube:     '#39ff8f',
+  portal_grav_flip:'#b039ff',
+  portal_grav_norm:'#ffb627',
+};
+
+function render() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Background
+  ctx.fillStyle = '#0a0c0f';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Grid
+  for (let col = 0; col <= COLS; col++) {
+    ctx.strokeStyle = (col % 10 === 0) ? '#1a2330' : '#111518';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(col * CELL + 0.5, 0);
+    ctx.lineTo(col * CELL + 0.5, canvas.height);
+    ctx.stroke();
+  }
+  for (let row = 0; row <= ROWS; row++) {
+    const isGround = row === GROUND_ROW;
+    ctx.strokeStyle = isGround ? '#1e3a28' : (row % 5 === 0 ? '#1a2330' : '#111518');
+    ctx.lineWidth = isGround ? 2 : 1;
+    ctx.beginPath();
+    ctx.moveTo(0, row * CELL + 0.5);
+    ctx.lineTo(canvas.width, row * CELL + 0.5);
+    ctx.stroke();
+  }
+
+  // Ground label
+  ctx.fillStyle = '#1e3a28';
+  ctx.font = '9px Share Tech Mono';
+  ctx.fillText('GROUND y=0', 4, GROUND_ROW * CELL - 3);
+
+  // X axis labels every 10
+  for (let x = 0; x < COLS; x += 10) {
+    ctx.fillStyle = '#1e3a28';
+    ctx.font = '8px Share Tech Mono';
+    ctx.fillText(x, x * CELL + 2, GROUND_ROW * CELL + 10);
+  }
+
+  // Objects
+  objects.forEach(obj => drawObject(obj));
+}
+
+function drawObject(obj) {
+  const color = COLORS[obj.type] || '#fff';
+  const {cx, cy} = levelToCanvas(obj.x, obj.y);
+
+  ctx.save();
+
+  switch(obj.type) {
+    case 'block': {
+      ctx.fillStyle = color + '33';
+      ctx.fillRect(cx+1, cy+1, CELL-2, CELL-2);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(cx+1.5, cy+1.5, CELL-3, CELL-3);
+      // inner cross
+      ctx.strokeStyle = color + '55';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(cx+1, cy+1); ctx.lineTo(cx+CELL-1, cy+CELL-1);
+      ctx.moveTo(cx+CELL-1, cy+1); ctx.lineTo(cx+1, cy+CELL-1);
+      ctx.stroke();
+      break;
+    }
+    case 'platform': {
+      const w = obj.len * CELL;
+      ctx.fillStyle = color + '22';
+      ctx.fillRect(cx+1, cy+1, w-2, CELL-2);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(cx+1.5, cy+1.5, w-3, CELL-3);
+      // dividers
+      ctx.strokeStyle = color + '44';
+      ctx.lineWidth = 0.5;
+      for (let i = 1; i < obj.len; i++) {
+        ctx.beginPath();
+        ctx.moveTo(cx + i*CELL, cy+1);
+        ctx.lineTo(cx + i*CELL, cy+CELL-1);
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'wall': {
+      const h = obj.height * CELL;
+      const wallCy = cy - (obj.height - 1) * CELL;
+      ctx.fillStyle = color + '22';
+      ctx.fillRect(cx+1, wallCy+1, CELL-2, h-2);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(cx+1.5, wallCy+1.5, CELL-3, h-3);
+      // dividers
+      ctx.strokeStyle = color + '44';
+      ctx.lineWidth = 0.5;
+      for (let i = 1; i < obj.height; i++) {
+        ctx.beginPath();
+        ctx.moveTo(cx+1, wallCy + i*CELL);
+        ctx.lineTo(cx+CELL-1, wallCy + i*CELL);
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'spike_up': {
+      ctx.fillStyle = color + 'bb';
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cx + CELL/2, cy + 2);
+      ctx.lineTo(cx + CELL - 2, cy + CELL - 2);
+      ctx.lineTo(cx + 2, cy + CELL - 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      break;
+    }
+    case 'spike_down': {
+      ctx.fillStyle = color + 'bb';
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cx + CELL/2, cy + CELL - 2);
+      ctx.lineTo(cx + CELL - 2, cy + 2);
+      ctx.lineTo(cx + 2, cy + 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      break;
+    }
+    default: {
+      // Portal
+      const labels = {
+        portal_ship: '✈', portal_cube: '■',
+        portal_grav_flip: '↓', portal_grav_norm: '↑'
+      };
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 8;
+      roundRect(ctx, cx+2, cy+2, CELL-4, CELL-4, 3);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = color + '33';
+      roundRect(ctx, cx+2, cy+2, CELL-4, CELL-4, 3);
+      ctx.fill();
+      ctx.fillStyle = color;
+      ctx.font = `bold ${CELL*0.55}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(labels[obj.type] || '?', cx + CELL/2, cy + CELL/2);
+      break;
+    }
+  }
+  ctx.restore();
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y);
+  ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+  ctx.lineTo(x+w, y+h-r);
+  ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h);
+  ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+  ctx.lineTo(x, y+r);
+  ctx.quadraticCurveTo(x, y, x+r, y);
+  ctx.closePath();
+}
+
+// ── OUTPUT GENERATION ──
+function updateOutput() {
+  const name = document.getElementById('level-name').value || 'My Level';
+
+  // Sort objects by x position
+  const sorted = [...objects].sort((a, b) => a.x - b.x);
+
+  const lines = [];
+  lines.push(`# ${name}`);
+  lines.push(`# Created with GeoFlip Level Builder`);
+  lines.push('');
+
+  const typeComments = {
+    block: 'Block',
+    platform: 'Platform',
+    wall: 'Wall',
+    spike_up: 'Spike (up)',
+    spike_down: 'Spike (down)',
+    portal_ship: 'Ship portal',
+    portal_cube: 'Cube portal',
+    portal_grav_flip: 'Flip gravity portal',
+    portal_grav_norm: 'Normal gravity portal',
+  };
+
+  const typeIds = {
+    block: 1,
+    spike_up: 2,
+    spike_down: 3,
+    portal_ship: 6,
+    portal_cube: 7,
+    portal_grav_flip: 8,
+    portal_grav_norm: 9,
+  };
+
+  sorted.forEach(obj => {
+    const comment = typeComments[obj.type] || obj.type;
+    switch(obj.type) {
+      case 'platform':
+        lines.push(`b,${obj.x},${obj.y},${obj.len} # ${comment} (len ${obj.len})`);
+        break;
+      case 'wall':
+        lines.push(`w,${obj.x},${obj.y},${obj.height} # ${comment} (height ${obj.height})`);
+        break;
+      default: {
+        const id = typeIds[obj.type];
+        lines.push(`${id},${obj.x},${obj.y} # ${comment}`);
+      }
+    }
+  });
+
+  const text = lines.join('\n');
+  document.getElementById('output-text').value = text;
+  document.getElementById('obj-count').textContent = `${objects.length} objs`;
+}
+
+// ── BUTTONS ──
+document.getElementById('btn-download').addEventListener('click', () => {
+  const name = document.getElementById('level-name').value.replace(/\s+/g,'_') || 'MyLevel';
+  const text = document.getElementById('output-text').value;
+  const blob = new Blob([text], {type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${name}.gflvl`;
+  a.click();
+});
+
+document.getElementById('btn-copy').addEventListener('click', () => {
+  const text = document.getElementById('output-text').value;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('btn-copy');
+    const orig = btn.textContent;
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => btn.textContent = orig, 1500);
+  });
+});
+
+document.getElementById('btn-clear').addEventListener('click', () => {
+  if (confirm('Clear the entire level?')) {
+    objects = [];
+    render();
+    updateOutput();
+  }
+});
+
+document.getElementById('level-name').addEventListener('input', updateOutput);
+
+// ── IMPORT ──
+function parseGflvl(text) {
+  const imported = [];
+  let levelName = null;
+
+  const idToType = {
+    1: 'block',
+    2: 'spike_up',
+    3: 'spike_down',
+    6: 'portal_ship',
+    7: 'portal_cube',
+    8: 'portal_grav_flip',
+    9: 'portal_grav_norm',
+  };
+
+  const lines = text.split('\n');
+  for (let raw of lines) {
+    // grab level name from first non-meta comment line
+    if (raw.trim().startsWith('#')) {
+      if (!levelName) {
+        const candidate = raw.replace(/^#\s*/, '').trim();
+        if (candidate && !candidate.toLowerCase().includes('created with')) {
+          levelName = candidate;
+        }
+      }
+      continue;
+    }
+
+    // strip inline comments and trim
+    const line = raw.replace(/#.*$/, '').trim();
+    if (!line) continue;
+    const parts = line.split(',').map(s => s.trim());
+    if (parts.length < 3) continue;
+
+    const token = parts[0];
+    const x = parseInt(parts[1]);
+    const y = parseInt(parts[2]);
+    if (isNaN(x) || isNaN(y)) continue;
+
+    if (token === 'b') {
+      const len = parseInt(parts[3]) || 1;
+      imported.push({ type: 'platform', x, y, len });
+    } else if (token === 'w') {
+      const height = parseInt(parts[3]) || 1;
+      imported.push({ type: 'wall', x, y, height });
+    } else {
+      const id = parseInt(token);
+      const type = idToType[id];
+      if (type) imported.push({ type, x, y });
+    }
+  }
+
+  return { objects: imported, levelName };
+}
+
+document.getElementById('btn-import').addEventListener('click', () => {
+  document.getElementById('file-input').click();
+});
+
+document.getElementById('file-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = evt => {
+    const { objects: imported, levelName } = parseGflvl(evt.target.result);
+    if (imported.length === 0) {
+      alert('No valid objects found in file.');
+      return;
+    }
+    objects = imported;
+    if (levelName) document.getElementById('level-name').value = levelName;
+    render();
+    updateOutput();
+    // scroll to start
+    document.getElementById('canvas-wrap').scrollLeft = 0;
+    // flash the obj count
+    const ct = document.getElementById('obj-count');
+    ct.style.color = 'var(--amber)';
+    setTimeout(() => ct.style.color = '', 800);
+  };
+  reader.readAsText(file);
+  // reset so same file can be re-imported
+  e.target.value = '';
+});
+
+// ── INIT ──
+render();
+updateOutput();
+
+// Scroll canvas to a reasonable starting position
+document.getElementById('canvas-wrap').scrollLeft = 0;
+</script>
+</body>
+</html>
